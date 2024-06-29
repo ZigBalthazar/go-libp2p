@@ -43,8 +43,8 @@ func (a *ClientPeerIDAuth) AddAuthTokenToRequest(req *http.Request) (peer.ID, er
 	return t.peerID, nil
 }
 
-// mutualAuth performs mutual authentication with the server at the given endpoint. Returns the server's peer id.
-func (a *ClientPeerIDAuth) mutualAuth(ctx context.Context, client *http.Client, authEndpoint string, origin string) (peer.ID, error) {
+// MutualAuth performs mutual authentication with the server at the given endpoint. Returns the server's peer id.
+func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, authEndpoint string, origin string) (peer.ID, error) {
 	if a.PrivKey == nil {
 		return "", errors.New("no private key set")
 	}

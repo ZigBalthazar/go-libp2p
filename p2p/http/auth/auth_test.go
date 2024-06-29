@@ -67,7 +67,7 @@ func TestMutualAuth(t *testing.T) {
 			require.NoError(t, err)
 
 			ctx := context.Background()
-			serverID, err := clientAuth.mutualAuth(ctx, client, ts.URL, "example.com")
+			serverID, err := clientAuth.MutualAuth(ctx, client, ts.URL, "example.com")
 			require.NoError(t, err)
 			require.Equal(t, expectedServerID, serverID)
 			require.NotZero(t, clientAuth.tokenMap["example.com"])
