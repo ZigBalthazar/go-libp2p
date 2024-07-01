@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -237,4 +240,80 @@ func BenchmarkAuths(b *testing.B) {
 			b.Fatal(err, resp.StatusCode)
 		}
 	}
+}
+
+// Test Vectors
+var zeroBytes = make([]byte, 64)
+var zeroKey, _, _ = crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
+
+// Peer ID derived from the zero key
+var zeroID, _ = peer.IDFromPublicKey(zeroKey.GetPublic())
+
+// Result of signing with a zero key and a 32 0 byte challenge with origin "example.com"
+var expectedClientSig = `56975c7694351cca10bf1c84fee1d49df86b6e356d8ff3208080b9cb49098d1e437845d87aacd15f908aabc8031ddc769721bb6bb9e4d1f2d2fc85b6d3c99e07`
+
+// Result of signing with a zero key and a 32 0 byte challenge with origin
+// "example.com" and client ID derived from the zero key
+var expectedServerSig = `4bc1ac4653cb2fa816b10793c2597da7bb4ab1391cd5e75332b96482a216f9cda197dcfb92727dbbacee9ad6859f3dc9edea5ab43fe6abbfa49c095efaeaa60e`
+
+type inputToSigning struct {
+	prefix string
+	params map[string]string
+}
+
+// 32 0 bytes encoded in base64
+var zeroBytesB64 = base64.URLEncoding.EncodeToString(make([]byte, 32))
+var inputToSigningTestVectors = []struct {
+	name                 string
+	input                inputToSigning
+	percentEncodedOutput string
+}{
+	{
+		name: "What the client signs",
+		input: inputToSigning{
+			prefix: PeerIDAuthScheme,
+			params: map[string]string{"challenge-client": zeroBytesB64, "origin": "example.com"},
+		},
+		percentEncodedOutput: "libp2p-PeerID=challenge-client=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%12origin=example.com",
+	}, {
+		name: "What the server signs",
+		input: inputToSigning{
+			prefix: PeerIDAuthScheme,
+			params: map[string]string{"challenge-server": zeroBytesB64, "origin": "example.com", "client": zeroID.String()},
+		},
+		percentEncodedOutput: "libp2p-PeerID=challenge-server=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%3Bclient=12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN%12origin=example.com",
+	},
+}
+
+func TestSigningVectors(t *testing.T) {
+	t.Run("Inputs to signing", func(t *testing.T) {
+		for _, test := range inputToSigningTestVectors {
+			t.Run(test.name, func(t *testing.T) {
+				params := make([]string, 0, len(test.input.params))
+				for k, v := range test.input.params {
+					params = append(params, fmt.Sprintf("%s=%s", k, v))
+				}
+				out, err := genDataToSign(nil, test.input.prefix, params)
+				require.NoError(t, err)
+				require.Equal(t, test.percentEncodedOutput, url.PathEscape(string(out)))
+			})
+		}
+	})
+	t.Run("Client sig", func(t *testing.T) {
+		client := ClientPeerIDAuth{PrivKey: zeroKey}
+		challengeClient := make([]byte, challengeLen)
+		origin := "example.com"
+		sig, err := client.sign(challengeClient, origin)
+		require.NoError(t, err)
+		require.Equal(t, expectedClientSig, hex.EncodeToString(sig))
+	})
+
+	t.Run("Server sig", func(t *testing.T) {
+		server := PeerIDAuth{PrivKey: zeroKey}
+		challengeServer := make([]byte, challengeLen)
+		origin := "example.com"
+		sig, err := server.signChallengeServer(challengeServer, zeroID, origin)
+		require.NoError(t, err)
+		require.Equal(t, expectedServerSig, hex.EncodeToString(sig))
+	})
 }

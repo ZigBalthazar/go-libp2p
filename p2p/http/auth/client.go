@@ -104,6 +104,14 @@ func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, 
 	return serverID, nil
 }
 
+func (a *ClientPeerIDAuth) sign(challengeClient []byte, origin string) ([]byte, error) {
+	challengeClientb64 := base64.URLEncoding.EncodeToString([]byte(challengeClient))
+	return sign(a.PrivKey, PeerIDAuthScheme, []string{
+		"challenge-client=" + challengeClientb64,
+		fmt.Sprintf(`origin="%s"`, origin),
+	})
+}
+
 // authSelfToServer performs the initial authentication request to the server. It authenticates the client to the server.
 // Returns the Authorization value with libp2p-PeerID scheme to use for subsequent requests.
 func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Client, myPeerID peer.ID, challengeServer []byte, authEndpoint string, origin string) (string, error) {
@@ -133,11 +141,7 @@ func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Cl
 		return "", errors.New("missing challenge")
 	}
 
-	challengeClientb64 := base64.URLEncoding.EncodeToString([]byte(f.challengeClient))
-	sig, err := sign(a.PrivKey, PeerIDAuthScheme, []string{
-		"challenge-client=" + challengeClientb64,
-		fmt.Sprintf(`origin="%s"`, origin),
-	})
+	sig, err := a.sign(f.challengeClient, origin)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign challenge: %w", err)
 	}

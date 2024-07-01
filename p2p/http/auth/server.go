@@ -83,7 +83,13 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Authorization", string(blobB64))
 
 		if len(f.challengeServer) >= challengeLen {
-			buf, err := a.signChallengeServer(f)
+			clientID, err := peer.IDFromPublicKey(f.pubKey)
+			if err != nil {
+				log.Debugf("failed to get peer ID: %s", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			buf, err := a.signChallengeServer(f.challengeServer, clientID, f.origin)
 			if err != nil {
 				log.Debugf("failed to sign challenge: %s", err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -121,19 +127,15 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.Next.ServeHTTP(w, r)
 }
 
-func (a *PeerIDAuth) signChallengeServer(f authFields) ([]byte, error) {
-	if len(f.challengeServer) == 0 {
+func (a *PeerIDAuth) signChallengeServer(challengeServer []byte, client peer.ID, origin string) ([]byte, error) {
+	if len(challengeServer) == 0 {
 		return nil, errors.New("missing challenge")
 	}
-	challengeb64 := base64.URLEncoding.EncodeToString([]byte(f.challengeServer))
-	clientID, err := peer.IDFromPublicKey(f.pubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get client ID: %w", err)
-	}
+	challengeb64 := base64.URLEncoding.EncodeToString([]byte(challengeServer))
 	partsToSign := []string{
 		"challenge-server=" + challengeb64,
-		"client=" + clientID.String(),
-		fmt.Sprintf(`origin="%s"`, f.origin),
+		"client=" + client.String(),
+		fmt.Sprintf(`origin="%s"`, origin),
 	}
 	sig, err := sign(a.PrivKey, PeerIDAuthScheme, partsToSign)
 	if err != nil {
