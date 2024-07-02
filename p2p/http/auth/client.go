@@ -44,7 +44,7 @@ func (a *ClientPeerIDAuth) AddAuthTokenToRequest(req *http.Request) (peer.ID, er
 }
 
 // MutualAuth performs mutual authentication with the server at the given endpoint. Returns the server's peer id.
-func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, authEndpoint string, origin string) (peer.ID, error) {
+func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, authEndpoint string, hostname string) (peer.ID, error) {
 	if a.PrivKey == nil {
 		return "", errors.New("no private key set")
 	}
@@ -59,13 +59,13 @@ func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, 
 	if err != nil {
 		return "", fmt.Errorf("failed to generate challenge-server: %w", err)
 	}
-	authValue, err := a.authSelfToServer(ctx, client, myPeerID, challengeServer[:], authEndpoint, origin)
+	authValue, err := a.authSelfToServer(ctx, client, myPeerID, challengeServer[:], authEndpoint, hostname)
 	if err != nil {
 		return "", fmt.Errorf("failed to authenticate self to server: %w", err)
 	}
 
 	authServerReq, err := http.NewRequestWithContext(ctx, "GET", authEndpoint, nil)
-	authServerReq.Host = origin
+	authServerReq.Host = hostname
 	if err != nil {
 		return "", fmt.Errorf("failed to create request to authenticate server: %w", err)
 	}
@@ -77,7 +77,7 @@ func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, 
 	resp.Body.Close()
 
 	// Verify the server's signature
-	respAuth, err := parseAuthFields(resp.Header.Get("Authentication-Info"), origin, false)
+	respAuth, err := parseAuthFields(resp.Header.Get("Authentication-Info"), hostname, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse Authentication-Info header: %w", err)
 	}
@@ -97,25 +97,25 @@ func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, 
 		if a.tokenMap == nil {
 			a.tokenMap = make(map[string]tokenInfo)
 		}
-		a.tokenMap[origin] = tokenInfo{token: bearer.bearerToken, peerID: serverID}
+		a.tokenMap[hostname] = tokenInfo{token: bearer.bearerToken, peerID: serverID}
 		a.tokenMapMu.Unlock()
 	}
 
 	return serverID, nil
 }
 
-func (a *ClientPeerIDAuth) sign(challengeClientB64 string, origin string) ([]byte, error) {
+func (a *ClientPeerIDAuth) sign(challengeClientB64 string, hostname string) ([]byte, error) {
 	return sign(a.PrivKey, PeerIDAuthScheme, []string{
 		"challenge-client=" + challengeClientB64,
-		fmt.Sprintf(`origin="%s"`, origin),
+		fmt.Sprintf(`hostname="%s"`, hostname),
 	})
 }
 
 // authSelfToServer performs the initial authentication request to the server. It authenticates the client to the server.
 // Returns the Authorization value with libp2p-PeerID scheme to use for subsequent requests.
-func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Client, myPeerID peer.ID, challengeServer []byte, authEndpoint string, origin string) (string, error) {
+func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Client, myPeerID peer.ID, challengeServer []byte, authEndpoint string, hostname string) (string, error) {
 	r, err := http.NewRequestWithContext(ctx, "GET", authEndpoint, nil)
-	r.Host = origin
+	r.Host = hostname
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -131,7 +131,7 @@ func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Cl
 	resp.Body.Close()
 
 	authHeader := resp.Header.Get("WWW-Authenticate")
-	f, err := parseAuthFields(authHeader, origin, false)
+	f, err := parseAuthFields(authHeader, hostname, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse our auth header: %w", err)
 	}
@@ -140,7 +140,7 @@ func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Cl
 		return "", errors.New("missing challenge")
 	}
 
-	sig, err := a.sign(f.challengeClientB64, origin)
+	sig, err := a.sign(f.challengeClientB64, hostname)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign challenge: %w", err)
 	}
@@ -172,7 +172,7 @@ func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Cl
 
 func (a *ClientPeerIDAuth) verifySigFromServer(r authFields, myPeerID peer.ID, challengeServer []byte) (peer.ID, error) {
 	partsToVerify := make([]string, 0, 3)
-	partsToVerify = append(partsToVerify, fmt.Sprintf(`origin="%s"`, r.origin))
+	partsToVerify = append(partsToVerify, fmt.Sprintf(`hostname="%s"`, r.hostname))
 	partsToVerify = append(partsToVerify, "challenge-server="+base64.URLEncoding.EncodeToString(challengeServer))
 	partsToVerify = append(partsToVerify, "client="+myPeerID.String())
 

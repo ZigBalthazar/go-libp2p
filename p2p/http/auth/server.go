@@ -21,10 +21,10 @@ const maxAuthHeaderSize = 8192
 const challengeTTL = 5 * time.Minute
 
 type PeerIDAuth struct {
-	PrivKey      crypto.PrivKey
-	ValidOrigins map[string]struct{}
-	TokenTTL     time.Duration
-	Next         http.Handler
+	PrivKey        crypto.PrivKey
+	ValidHostnames map[string]struct{}
+	TokenTTL       time.Duration
+	Next           http.Handler
 }
 
 var errMissingAuthHeader = errors.New("missing header")
@@ -38,9 +38,9 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, err := a.UnwrapBearerToken(r)
 	if err != nil {
 		// No bearer token, let's try peer ID auth
-		_, ok := a.ValidOrigins[r.Host]
+		_, ok := a.ValidHostnames[r.Host]
 		if !ok {
-			log.Debugf("Unauthorized request from %s: invalid origin", r.Host)
+			log.Debugf("Unauthorized request from %s: invalid hostname", r.Host)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -61,7 +61,7 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		tok := bearerToken{
 			peer:      id,
-			origin:    f.origin,
+			hostname:  f.hostname,
 			createdAt: time.Now(),
 		}
 		b := pool.Get(4096)
@@ -89,7 +89,7 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			buf, err := a.signChallengeServer(f.challengeServerB64, clientID, f.origin)
+			buf, err := a.signChallengeServer(f.challengeServerB64, clientID, f.hostname)
 			if err != nil {
 				log.Debugf("failed to sign challenge: %s", err)
 				w.WriteHeader(http.StatusInternalServerError)
@@ -127,14 +127,14 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.Next.ServeHTTP(w, r)
 }
 
-func (a *PeerIDAuth) signChallengeServer(challengeServerB64 string, client peer.ID, origin string) ([]byte, error) {
+func (a *PeerIDAuth) signChallengeServer(challengeServerB64 string, client peer.ID, hostname string) ([]byte, error) {
 	if len(challengeServerB64) == 0 {
 		return nil, errors.New("missing challenge")
 	}
 	partsToSign := []string{
 		"challenge-server=" + challengeServerB64,
 		"client=" + client.String(),
-		fmt.Sprintf(`origin="%s"`, origin),
+		fmt.Sprintf(`hostname="%s"`, hostname),
 	}
 	sig, err := sign(a.PrivKey, PeerIDAuthScheme, partsToSign)
 	if err != nil {
@@ -156,7 +156,7 @@ func (a *PeerIDAuth) authenticate(f authFields) (peer.ID, error) {
 	if len(challengeClient) > 0 {
 		partsToVerify = append(partsToVerify, "challenge-client="+base64.URLEncoding.EncodeToString(challengeClient))
 	}
-	partsToVerify = append(partsToVerify, fmt.Sprintf(`origin="%s"`, f.origin))
+	partsToVerify = append(partsToVerify, fmt.Sprintf(`hostname="%s"`, f.hostname))
 
 	err = verifySig(f.pubKey, PeerIDAuthScheme, partsToVerify, f.signature)
 	if err != nil {
@@ -180,7 +180,7 @@ func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request) (peer.ID, error) {
 	return a.unwrapBearerToken(r.Host, bearerScheme)
 }
 
-func (a *PeerIDAuth) unwrapBearerToken(expectedOrigin string, s authScheme) (peer.ID, error) {
+func (a *PeerIDAuth) unwrapBearerToken(expectedHostname string, s authScheme) (peer.ID, error) {
 	buf := pool.Get(4096)
 	defer pool.Put(buf)
 	buf, err := b64AppendDecode(buf[:0], []byte(s.bearerToken))
@@ -194,15 +194,15 @@ func (a *PeerIDAuth) unwrapBearerToken(expectedOrigin string, s authScheme) (pee
 	if time.Now().After(parsed.createdAt.Add(a.TokenTTL)) {
 		return "", fmt.Errorf("bearer token expired")
 	}
-	if parsed.origin != expectedOrigin {
-		return "", fmt.Errorf("bearer token origin mismatch")
+	if parsed.hostname != expectedHostname {
+		return "", fmt.Errorf("bearer token hostname mismatch")
 	}
 	return parsed.peer, nil
 }
 
 type bearerToken struct {
 	peer      peer.ID
-	origin    string
+	hostname  string
 	createdAt time.Time
 }
 
@@ -224,9 +224,9 @@ func genBearerTokenBlob(buf []byte, privKey crypto.PrivKey, t bearerToken) ([]by
 	buf = binary.AppendUvarint(buf, uint64(len(peerBytes)))
 	buf = append(buf, peerBytes...)
 
-	// Origin
-	buf = binary.AppendUvarint(buf, uint64(len(t.origin)))
-	buf = append(buf, t.origin...)
+	// Hostname
+	buf = binary.AppendUvarint(buf, uint64(len(t.hostname)))
+	buf = append(buf, t.hostname...)
 
 	// Created at
 	buf = binary.AppendUvarint(buf, uint64(len(createdAtBytes)))
@@ -275,17 +275,17 @@ func parseBearerTokenBlob(privKey crypto.PrivKey, blob []byte) (bearerToken, err
 	}
 	blob = blob[peerIDLen:]
 
-	// Origin
-	originLen, n := binary.Uvarint(blob)
+	// Hostname
+	hostnameLen, n := binary.Uvarint(blob)
 	if n <= 0 {
-		return bearerToken{}, fmt.Errorf("failed to read origin length")
+		return bearerToken{}, fmt.Errorf("failed to read hostname length")
 	}
 	blob = blob[n:]
-	if int(originLen) > len(blob) {
-		return bearerToken{}, fmt.Errorf("origin length is wrong")
+	if int(hostnameLen) > len(blob) {
+		return bearerToken{}, fmt.Errorf("hostname length is wrong")
 	}
-	origin := string(blob[:originLen])
-	blob = blob[originLen:]
+	hostname := string(blob[:hostnameLen])
+	blob = blob[hostnameLen:]
 
 	// Created At
 	createdAtLen, n := binary.Uvarint(blob)
@@ -314,7 +314,7 @@ func parseBearerTokenBlob(privKey crypto.PrivKey, blob []byte) (bearerToken, err
 	if !ok {
 		return bearerToken{}, fmt.Errorf("signature verification failed")
 	}
-	return bearerToken{peer: peer, origin: origin, createdAt: createdAt}, nil
+	return bearerToken{peer: peer, hostname: hostname, createdAt: createdAt}, nil
 }
 
 type opaqueUnwrapped struct {

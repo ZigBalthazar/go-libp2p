@@ -28,9 +28,9 @@ func TestMutualAuth(t *testing.T) {
 	serverKey, _, err := crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
 	require.NoError(t, err)
 	auth := PeerIDAuth{
-		PrivKey:      serverKey,
-		ValidOrigins: map[string]struct{}{"example.com": {}},
-		TokenTTL:     time.Hour,
+		PrivKey:        serverKey,
+		ValidHostnames: map[string]struct{}{"example.com": {}},
+		TokenTTL:       time.Hour,
 	}
 
 	ts := httptest.NewServer(&auth)
@@ -181,9 +181,9 @@ func FuzzServeHTTP(f *testing.F) {
 	serverKey, _, err := crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
 	require.NoError(f, err)
 	auth := PeerIDAuth{
-		PrivKey:      serverKey,
-		ValidOrigins: map[string]struct{}{"example.com": {}},
-		TokenTTL:     time.Hour,
+		PrivKey:        serverKey,
+		ValidHostnames: map[string]struct{}{"example.com": {}},
+		TokenTTL:       time.Hour,
 	}
 	// Just check that we don't panic'
 	f.Fuzz(func(t *testing.T, data []byte) {
@@ -209,9 +209,9 @@ func BenchmarkAuths(b *testing.B) {
 	serverKey, _, err := crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
 	require.NoError(b, err)
 	auth := PeerIDAuth{
-		PrivKey:      serverKey,
-		ValidOrigins: map[string]struct{}{"example.com": {}},
-		TokenTTL:     time.Hour,
+		PrivKey:        serverKey,
+		ValidHostnames: map[string]struct{}{"example.com": {}},
+		TokenTTL:       time.Hour,
 	}
 
 	ts := httptest.NewServer(&auth)
@@ -269,18 +269,18 @@ func TestWalkthroughInSpec(t *testing.T) {
 	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", challengeClientb64)
 	challengeServer64 := "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
 
-	origin := "example.com"
+	hostname := "example.com"
 
 	clientParts := []string{
 		"challenge-client=" + challengeClientb64,
-		fmt.Sprintf(`origin="%s"`, origin),
+		fmt.Sprintf(`hostname="%s"`, hostname),
 	}
 	toSign, err := genDataToSign(nil, PeerIDAuthScheme, clientParts)
 	require.NoError(t, err)
-	require.Equal(t, "libp2p-PeerID=challenge-client=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%14origin=%22example.com%22", url.PathEscape(string(toSign)))
+	require.Equal(t, "libp2p-PeerID=challenge-client=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%16hostname=%22example.com%22", url.PathEscape(string(toSign)))
 	sig, err := sign(clientKey, PeerIDAuthScheme, clientParts)
 	require.NoError(t, err)
-	require.Equal(t, "MKoR8Shzr6VmQ675dErKh_gGGUsGaO8zXnZ8Cx8bIKiQlYBhqazUG8w4lG3_Wd5IfSz5P1HLfXtVb_fg_dsxDw==", base64.URLEncoding.EncodeToString(sig))
+	require.Equal(t, "F5OBYbbMXoIVJNWrW0UANi7rrbj4GCB6kcEceQjajLTMvC-_jpBF9MFlxiaNYXOEiPQqeo_S56YUSNinwl0ZCQ==", base64.URLEncoding.EncodeToString(sig))
 
 	serverID := zeroID
 	require.Equal(t, "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN", serverID.String())
@@ -288,13 +288,13 @@ func TestWalkthroughInSpec(t *testing.T) {
 	serverParts := []string{
 		"challenge-server=" + challengeServer64,
 		"client=" + clientID.String(),
-		fmt.Sprintf(`origin="%s"`, origin),
+		fmt.Sprintf(`hostname="%s"`, hostname),
 	}
 	toSign, err = genDataToSign(nil, PeerIDAuthScheme, serverParts)
 	require.NoError(t, err)
-	require.Equal(t, "libp2p-PeerID=challenge-server=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=%3Bclient=12D3KooWBtg3aaRMjxwedh83aGiUkwSxDwUZkzuJcfaqUmo7R3pq%14origin=%22example.com%22", url.PathEscape(string(toSign)))
+	require.Equal(t, "libp2p-PeerID=challenge-server=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=%3Bclient=12D3KooWBtg3aaRMjxwedh83aGiUkwSxDwUZkzuJcfaqUmo7R3pq%16hostname=%22example.com%22", url.PathEscape(string(toSign)))
 
 	sig, err = sign(zeroKey, PeerIDAuthScheme, serverParts)
 	require.NoError(t, err)
-	require.Equal(t, "m0OkSsO9YGcqfZ_XVTbiRwTtM4ds8434D9aod22Mmo3Wm0vBvxHOd71glC-uEez6g5gjA580KkGc9DOIvP47BQ==", base64.URLEncoding.EncodeToString(sig))
+	require.Equal(t, "btLFqW200aDTQqpkKetJJje7V-iDknXygFqPsfiegNsboXeYDiQ6Rqcpezz1wfr8j9h83QkN9z78cAWzKzV_AQ==", base64.URLEncoding.EncodeToString(sig))
 }

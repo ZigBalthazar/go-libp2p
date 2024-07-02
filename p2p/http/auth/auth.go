@@ -130,7 +130,7 @@ func genDataToSign(buf []byte, prefix string, parts []string) ([]byte, error) {
 }
 
 type authFields struct {
-	origin             string
+	hostname           string
 	pubKey             crypto.PubKey
 	opaque             string
 	challengeServerB64 string
@@ -150,7 +150,7 @@ func decodeB64PubKey(b64EncodedPubKey string) (crypto.PubKey, error) {
 	return crypto.UnmarshalPublicKey(buf)
 }
 
-func parseAuthFields(authHeader string, origin string, isServer bool) (authFields, error) {
+func parseAuthFields(authHeader string, hostname string, isServer bool) (authFields, error) {
 	if authHeader == "" {
 		return authFields{}, errMissingAuthHeader
 	}
@@ -227,7 +227,7 @@ func parseAuthFields(authHeader string, origin string, isServer bool) (authField
 	}
 
 	return authFields{
-		origin:             origin,
+		hostname:           hostname,
 		pubKey:             pubKey,
 		opaque:             peerIDAuth.params["opaque"],
 		challengeServerB64: challengeServer,
