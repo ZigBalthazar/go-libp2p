@@ -78,7 +78,7 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		blobB64 = blobB64[:0]
 		blobB64 = append(blobB64, BearerAuthScheme...)
 		blobB64 = append(blobB64, ' ')
-		blobB64 = base64.URLEncoding.AppendEncode(blobB64, b)
+		blobB64 = b64AppendEncode(blobB64, b)
 
 		w.Header().Set("Authorization", string(blobB64))
 
@@ -183,7 +183,7 @@ func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request) (peer.ID, error) {
 func (a *PeerIDAuth) unwrapBearerToken(expectedOrigin string, s authScheme) (peer.ID, error) {
 	buf := pool.Get(4096)
 	defer pool.Put(buf)
-	buf, err := base64.URLEncoding.AppendDecode(buf[:0], []byte(s.bearerToken))
+	buf, err := b64AppendDecode(buf[:0], []byte(s.bearerToken))
 	if err != nil {
 		return "", fmt.Errorf("failed to decode bearer token: %w", err)
 	}
@@ -329,7 +329,7 @@ func getChallengeFromOpaque(privKey crypto.PrivKey, opaqueB64 []byte) (opaqueUnw
 
 	opaqueBlob := pool.Get(2048)
 	defer pool.Put(opaqueBlob)
-	opaqueBlob, err := base64.URLEncoding.AppendDecode(opaqueBlob[:0], opaqueB64)
+	opaqueBlob, err := b64AppendDecode(opaqueBlob[:0], opaqueB64)
 	if err != nil {
 		return opaqueUnwrapped{}, fmt.Errorf("failed to decode opaque blob: %w", err)
 	}
@@ -410,9 +410,9 @@ func (a *PeerIDAuth) serveAuthReq(w http.ResponseWriter) {
 	defer pool.Put(authHeaderVal)
 	authHeaderVal = authHeaderVal[:0]
 	authHeaderVal = append(authHeaderVal, serverAuthPrefix...)
-	authHeaderVal = base64.URLEncoding.AppendEncode(authHeaderVal, challenge[:])
+	authHeaderVal = b64AppendEncode(authHeaderVal, challenge[:])
 	authHeaderVal = append(authHeaderVal, ", opaque="...)
-	authHeaderVal = base64.URLEncoding.AppendEncode(authHeaderVal, opaque)
+	authHeaderVal = b64AppendEncode(authHeaderVal, opaque)
 
 	w.Header().Set("WWW-Authenticate", string(authHeaderVal))
 	w.WriteHeader(http.StatusUnauthorized)

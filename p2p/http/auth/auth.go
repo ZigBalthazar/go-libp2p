@@ -143,7 +143,7 @@ func decodeB64PubKey(b64EncodedPubKey string) (crypto.PubKey, error) {
 	buf := pool.Get(bLen)
 	defer pool.Put(buf)
 
-	buf, err := base64.URLEncoding.AppendDecode(buf[:0], []byte(b64EncodedPubKey))
+	buf, err := b64AppendDecode(buf[:0], []byte(b64EncodedPubKey))
 	if err != nil {
 		return nil, err
 	}
@@ -234,4 +234,30 @@ func parseAuthFields(authHeader string, origin string, isServer bool) (authField
 		challengeClientB64: challengeClient,
 		signature:          sig,
 	}, nil
+}
+
+// Same as base64.URLEncoding.AppendEncode, but backported for Go 1.21. Once we are on Go 1.23 we can drop this
+func b64AppendEncode(dst, src []byte) []byte {
+	enc := base64.URLEncoding
+	n := enc.EncodedLen(len(src))
+	dst = slices.Grow(dst, n)
+	enc.Encode(dst[len(dst):][:n], src)
+	return dst[:len(dst)+n]
+}
+
+// Same as base64.URLEncoding.AppendDecode, but backported for Go 1.21. Once we are on Go 1.23 we can drop this
+func b64AppendDecode(dst, src []byte) ([]byte, error) {
+	enc := base64.URLEncoding
+	encNoPad := base64.RawURLEncoding
+
+	// Compute the output size without padding to avoid over allocating.
+	n := len(src)
+	for n > 0 && rune(src[n-1]) == base64.StdPadding {
+		n--
+	}
+	n = encNoPad.DecodedLen(n)
+
+	dst = slices.Grow(dst, n)
+	n, err := enc.Decode(dst[len(dst):][:n], src)
+	return dst[:len(dst)+n], err
 }
