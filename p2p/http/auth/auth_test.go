@@ -249,71 +249,52 @@ var zeroKey, _, _ = crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
 // Peer ID derived from the zero key
 var zeroID, _ = peer.IDFromPublicKey(zeroKey.GetPublic())
 
-// Result of signing with a zero key and a 32 0 byte challenge with origin "example.com"
-var expectedClientSig = `56975c7694351cca10bf1c84fee1d49df86b6e356d8ff3208080b9cb49098d1e437845d87aacd15f908aabc8031ddc769721bb6bb9e4d1f2d2fc85b6d3c99e07`
-
-// Result of signing with a zero key and a 32 0 byte challenge with origin
-// "example.com" and client ID derived from the zero key
-var expectedServerSig = `4bc1ac4653cb2fa816b10793c2597da7bb4ab1391cd5e75332b96482a216f9cda197dcfb92727dbbacee9ad6859f3dc9edea5ab43fe6abbfa49c095efaeaa60e`
-
-type inputToSigning struct {
-	prefix string
-	params map[string]string
+func genClientID(t *testing.T) (peer.ID, crypto.PrivKey) {
+	clientPrivStr, err := hex.DecodeString("080112407e0830617c4a7de83925dfb2694556b12936c477a0e1feb2e148ec9da60fee7d1ed1e8fae2c4a144b8be8fd4b47bf3d3b34b871c3cacf6010f0e42d474fce27e")
+	require.NoError(t, err)
+	clientKey, err := crypto.UnmarshalPrivateKey(clientPrivStr)
+	require.NoError(t, err)
+	clientID, err := peer.IDFromPrivateKey(clientKey)
+	require.NoError(t, err)
+	return clientID, clientKey
 }
 
-// 32 0 bytes encoded in base64
-var zeroBytesB64 = base64.URLEncoding.EncodeToString(make([]byte, 32))
-var inputToSigningTestVectors = []struct {
-	name                 string
-	input                inputToSigning
-	percentEncodedOutput string
-}{
-	{
-		name: "What the client signs",
-		input: inputToSigning{
-			prefix: PeerIDAuthScheme,
-			params: map[string]string{"challenge-client": zeroBytesB64, "origin": "example.com"},
-		},
-		percentEncodedOutput: "libp2p-PeerID=challenge-client=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%12origin=example.com",
-	}, {
-		name: "What the server signs",
-		input: inputToSigning{
-			prefix: PeerIDAuthScheme,
-			params: map[string]string{"challenge-server": zeroBytesB64, "origin": "example.com", "client": zeroID.String()},
-		},
-		percentEncodedOutput: "libp2p-PeerID=challenge-server=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%3Bclient=12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN%12origin=example.com",
-	},
-}
+// TestWalkthroughInSpec tests the walkthrough example in libp2p/specs
+func TestWalkthroughInSpec(t *testing.T) {
+	zeroBytes := make([]byte, 32)
+	clientID, clientKey := genClientID(t)
+	require.Equal(t, "12D3KooWBtg3aaRMjxwedh83aGiUkwSxDwUZkzuJcfaqUmo7R3pq", clientID.String())
 
-func TestSigningVectors(t *testing.T) {
-	t.Run("Inputs to signing", func(t *testing.T) {
-		for _, test := range inputToSigningTestVectors {
-			t.Run(test.name, func(t *testing.T) {
-				params := make([]string, 0, len(test.input.params))
-				for k, v := range test.input.params {
-					params = append(params, fmt.Sprintf("%s=%s", k, v))
-				}
-				out, err := genDataToSign(nil, test.input.prefix, params)
-				require.NoError(t, err)
-				require.Equal(t, test.percentEncodedOutput, url.PathEscape(string(out)))
-			})
-		}
-	})
-	t.Run("Client sig", func(t *testing.T) {
-		client := ClientPeerIDAuth{PrivKey: zeroKey}
-		challengeClient := make([]byte, challengeLen)
-		origin := "example.com"
-		sig, err := client.sign(challengeClient, origin)
-		require.NoError(t, err)
-		require.Equal(t, expectedClientSig, hex.EncodeToString(sig))
-	})
+	challengeClientb64 := base64.URLEncoding.EncodeToString(zeroBytes)
+	require.Equal(t, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", challengeClientb64)
+	challengeServer64 := "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="
 
-	t.Run("Server sig", func(t *testing.T) {
-		server := PeerIDAuth{PrivKey: zeroKey}
-		challengeServer := make([]byte, challengeLen)
-		origin := "example.com"
-		sig, err := server.signChallengeServer(challengeServer, zeroID, origin)
-		require.NoError(t, err)
-		require.Equal(t, expectedServerSig, hex.EncodeToString(sig))
-	})
+	origin := "example.com"
+
+	clientParts := []string{
+		"challenge-client=" + challengeClientb64,
+		fmt.Sprintf(`origin="%s"`, origin),
+	}
+	toSign, err := genDataToSign(nil, PeerIDAuthScheme, clientParts)
+	require.NoError(t, err)
+	require.Equal(t, "libp2p-PeerID=challenge-client=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=%14origin=%22example.com%22", url.PathEscape(string(toSign)))
+	sig, err := sign(clientKey, PeerIDAuthScheme, clientParts)
+	require.NoError(t, err)
+	require.Equal(t, "MKoR8Shzr6VmQ675dErKh_gGGUsGaO8zXnZ8Cx8bIKiQlYBhqazUG8w4lG3_Wd5IfSz5P1HLfXtVb_fg_dsxDw==", base64.URLEncoding.EncodeToString(sig))
+
+	serverID := zeroID
+	require.Equal(t, "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN", serverID.String())
+
+	serverParts := []string{
+		"challenge-server=" + challengeServer64,
+		"client=" + clientID.String(),
+		fmt.Sprintf(`origin="%s"`, origin),
+	}
+	toSign, err = genDataToSign(nil, PeerIDAuthScheme, serverParts)
+	require.NoError(t, err)
+	require.Equal(t, "libp2p-PeerID=challenge-server=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=%3Bclient=12D3KooWBtg3aaRMjxwedh83aGiUkwSxDwUZkzuJcfaqUmo7R3pq%14origin=%22example.com%22", url.PathEscape(string(toSign)))
+
+	sig, err = sign(zeroKey, PeerIDAuthScheme, serverParts)
+	require.NoError(t, err)
+	require.Equal(t, "m0OkSsO9YGcqfZ_XVTbiRwTtM4ds8434D9aod22Mmo3Wm0vBvxHOd71glC-uEez6g5gjA580KkGc9DOIvP47BQ==", base64.URLEncoding.EncodeToString(sig))
 }
