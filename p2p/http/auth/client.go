@@ -104,10 +104,9 @@ func (a *ClientPeerIDAuth) MutualAuth(ctx context.Context, client *http.Client, 
 	return serverID, nil
 }
 
-func (a *ClientPeerIDAuth) sign(challengeClient []byte, origin string) ([]byte, error) {
-	challengeClientb64 := base64.URLEncoding.EncodeToString([]byte(challengeClient))
+func (a *ClientPeerIDAuth) sign(challengeClientB64 string, origin string) ([]byte, error) {
 	return sign(a.PrivKey, PeerIDAuthScheme, []string{
-		"challenge-client=" + challengeClientb64,
+		"challenge-client=" + challengeClientB64,
 		fmt.Sprintf(`origin="%s"`, origin),
 	})
 }
@@ -137,11 +136,11 @@ func (a *ClientPeerIDAuth) authSelfToServer(ctx context.Context, client *http.Cl
 		return "", fmt.Errorf("failed to parse our auth header: %w", err)
 	}
 
-	if len(f.challengeClient) == 0 {
+	if len(f.challengeClientB64) == 0 {
 		return "", errors.New("missing challenge")
 	}
 
-	sig, err := a.sign(f.challengeClient, origin)
+	sig, err := a.sign(f.challengeClientB64, origin)
 	if err != nil {
 		return "", fmt.Errorf("failed to sign challenge: %w", err)
 	}

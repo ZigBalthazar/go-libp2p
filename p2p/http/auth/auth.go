@@ -130,12 +130,12 @@ func genDataToSign(buf []byte, prefix string, parts []string) ([]byte, error) {
 }
 
 type authFields struct {
-	origin          string
-	pubKey          crypto.PubKey
-	opaque          string
-	challengeServer []byte
-	challengeClient []byte
-	signature       []byte
+	origin             string
+	pubKey             crypto.PubKey
+	opaque             string
+	challengeServerB64 string
+	challengeClientB64 string
+	signature          []byte
 }
 
 func decodeB64PubKey(b64EncodedPubKey string) (crypto.PubKey, error) {
@@ -218,36 +218,20 @@ func parseAuthFields(authHeader string, origin string, isServer bool) (authField
 		}
 	}
 
-	var challengeServer []byte
-	if peerIDAuth.params["challenge-server"] != "" {
-		challengeServer, err = base64.URLEncoding.DecodeString(peerIDAuth.params["challenge-server"])
-		if err != nil {
-			return authFields{}, fmt.Errorf("failed to decode challenge: %s", err)
-		}
-	}
+	challengeServer := peerIDAuth.params["challenge-server"]
 
-	var challengeClient []byte
-	if !isServer && peerIDAuth.params["challenge-client"] != "" {
+	var challengeClient string
+	if !isServer {
 		// Only parse this for the client. The server should read this from the opaque field
-		challengeClient, err = base64.URLEncoding.DecodeString(peerIDAuth.params["challenge-client"])
-		if err != nil {
-			return authFields{}, fmt.Errorf("failed to decode challenge: %s", err)
-		}
+		challengeClient = peerIDAuth.params["challenge-client"]
 	}
 
 	return authFields{
-		origin:          origin,
-		pubKey:          pubKey,
-		opaque:          peerIDAuth.params["opaque"],
-		challengeServer: challengeServer,
-		challengeClient: challengeClient,
-		signature:       sig,
+		origin:             origin,
+		pubKey:             pubKey,
+		opaque:             peerIDAuth.params["opaque"],
+		challengeServerB64: challengeServer,
+		challengeClientB64: challengeClient,
+		signature:          sig,
 	}, nil
 }
-
-// TODOs
-// - update spec to mention base64 url encoding
-// - Use string builder and put them in a pool
-//   - benchmark allocs
-// - mutual auth
-// - an expiration time in opaque token
