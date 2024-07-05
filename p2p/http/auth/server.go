@@ -25,6 +25,8 @@ type PeerIDAuth struct {
 	ValidHostnames map[string]struct{}
 	TokenTTL       time.Duration
 	Next           http.Handler
+	// InsecureNoTLS is a flag that allows the server to accept requests without a TLS ServerName. Used only for testing.
+	InsecureNoTLS bool
 }
 
 var errMissingAuthHeader = errors.New("missing header")
@@ -34,18 +36,31 @@ var errMissingAuthHeader = errors.New("missing header")
 // scheme. If a Next handler is set, it will be called on authenticated
 // requests.
 func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	hostname := r.Host
+	if !a.InsecureNoTLS {
+		if r.TLS == nil {
+			log.Debugf("No TLS connection, and InsecureNoTLS is false")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if hostname != r.TLS.ServerName {
+			log.Debugf("Unauthorized request for host %s: hostname mismatch. Expected %s", hostname, r.TLS.ServerName)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
 	// Do they have a bearer token?
-	_, err := a.UnwrapBearerToken(r)
+	_, err := a.UnwrapBearerToken(r, hostname)
 	if err != nil {
 		// No bearer token, let's try peer ID auth
-		_, ok := a.ValidHostnames[r.Host]
+		_, ok := a.ValidHostnames[hostname]
 		if !ok {
-			log.Debugf("Unauthorized request from %s: invalid hostname", r.Host)
+			log.Debugf("Unauthorized request from %s: invalid hostname", hostname)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		f, err := parseAuthFields(r.Header.Get("Authorization"), r.Host, true)
+		f, err := parseAuthFields(r.Header.Get("Authorization"), hostname, true)
 		if err != nil {
 			a.serveAuthReq(w)
 			return
@@ -165,7 +180,7 @@ func (a *PeerIDAuth) authenticate(f authFields) (peer.ID, error) {
 	return peer.IDFromPublicKey(f.pubKey)
 }
 
-func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request) (peer.ID, error) {
+func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request, expectedHostname string) (peer.ID, error) {
 	if !strings.Contains(r.Header.Get("Authorization"), BearerAuthScheme) {
 		return "", errors.New("missing bearer auth scheme")
 	}
@@ -177,7 +192,7 @@ func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request) (peer.ID, error) {
 	if !ok {
 		return "", fmt.Errorf("missing bearer auth scheme")
 	}
-	return a.unwrapBearerToken(r.Host, bearerScheme)
+	return a.unwrapBearerToken(expectedHostname, bearerScheme)
 }
 
 func (a *PeerIDAuth) unwrapBearerToken(expectedHostname string, s authScheme) (peer.ID, error) {
