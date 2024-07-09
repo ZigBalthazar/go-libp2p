@@ -17,6 +17,7 @@ import (
 
 const PeerIDAuthScheme = "libp2p-PeerID"
 const BearerAuthScheme = "libp2p-Bearer"
+const ProtocolID = "/http-peer-id-auth/1.0.0"
 const serverAuthPrefix = PeerIDAuthScheme + " challenge-client="
 const challengeLen = 32
 
