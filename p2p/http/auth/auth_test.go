@@ -305,6 +305,11 @@ func genClientID(t *testing.T) (peer.ID, crypto.PrivKey) {
 
 // TestWalkthroughInSpec tests the walkthrough example in libp2p/specs
 func TestWalkthroughInSpec(t *testing.T) {
+	marshalledZeroKey, err := crypto.MarshalPrivateKey(zeroKey)
+	require.NoError(t, err)
+	// To demonstrate the marshalled version of the zero key. In js-libp2p (maybe others?) it's easier to consume this form.
+	require.Equal(t, "0801124000000000000000000000000000000000000000000000000000000000000000003b6a27bcceb6a42d62a3a8d02a6f0d73653215771de243a63ac048a18b59da29", hex.EncodeToString(marshalledZeroKey))
+
 	zeroBytes := make([]byte, 32)
 	clientID, clientKey := genClientID(t)
 	require.Equal(t, "12D3KooWBtg3aaRMjxwedh83aGiUkwSxDwUZkzuJcfaqUmo7R3pq", clientID.String())
