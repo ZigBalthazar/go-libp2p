@@ -56,15 +56,15 @@ func TestMutualAuth(t *testing.T) {
 
 	type serverTestCase struct {
 		name      string
-		serverGen func(t *testing.T) (*httptest.Server, *PeerIDAuth)
+		serverGen func(t *testing.T) (*httptest.Server, *ServerPeerIDAuth)
 	}
 
 	serverTestCases := []serverTestCase{
 		{
 			name: "no TLS",
-			serverGen: func(t *testing.T) (*httptest.Server, *PeerIDAuth) {
+			serverGen: func(t *testing.T) (*httptest.Server, *ServerPeerIDAuth) {
 				t.Helper()
-				auth := PeerIDAuth{
+				auth := ServerPeerIDAuth{
 					PrivKey:        serverKey,
 					ValidHostnames: map[string]struct{}{"example.com": {}},
 					TokenTTL:       time.Hour,
@@ -78,9 +78,9 @@ func TestMutualAuth(t *testing.T) {
 		},
 		{
 			name: "TLS",
-			serverGen: func(t *testing.T) (*httptest.Server, *PeerIDAuth) {
+			serverGen: func(t *testing.T) (*httptest.Server, *ServerPeerIDAuth) {
 				t.Helper()
-				auth := PeerIDAuth{
+				auth := ServerPeerIDAuth{
 					PrivKey:        serverKey,
 					ValidHostnames: map[string]struct{}{"example.com": {}},
 					TokenTTL:       time.Hour,
@@ -222,7 +222,7 @@ func FuzzServeHTTP(f *testing.F) {
 	zeroBytes := make([]byte, 64)
 	serverKey, _, err := crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
 	require.NoError(f, err)
-	auth := PeerIDAuth{
+	auth := ServerPeerIDAuth{
 		PrivKey:        serverKey,
 		ValidHostnames: map[string]struct{}{"example.com": {}},
 		TokenTTL:       time.Hour,
@@ -251,7 +251,7 @@ func BenchmarkAuths(b *testing.B) {
 	zeroBytes := make([]byte, 64)
 	serverKey, _, err := crypto.GenerateEd25519Key(bytes.NewReader(zeroBytes))
 	require.NoError(b, err)
-	auth := PeerIDAuth{
+	auth := ServerPeerIDAuth{
 		PrivKey:        serverKey,
 		ValidHostnames: map[string]struct{}{"example.com": {}},
 		TokenTTL:       time.Hour,

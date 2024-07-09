@@ -20,7 +20,7 @@ const maxAuthHeaderSize = 8192
 
 const challengeTTL = 5 * time.Minute
 
-type PeerIDAuth struct {
+type ServerPeerIDAuth struct {
 	PrivKey        crypto.PrivKey
 	ValidHostnames map[string]struct{}
 	TokenTTL       time.Duration
@@ -35,7 +35,7 @@ var errMissingAuthHeader = errors.New("missing header")
 // attempt to authenticate the request using using the libp2p peer ID auth
 // scheme. If a Next handler is set, it will be called on authenticated
 // requests.
-func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (a *ServerPeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hostname := r.Host
 	if !a.InsecureNoTLS {
 		if r.TLS == nil {
@@ -142,7 +142,7 @@ func (a *PeerIDAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.Next.ServeHTTP(w, r)
 }
 
-func (a *PeerIDAuth) signChallengeServer(challengeServerB64 string, client peer.ID, hostname string) ([]byte, error) {
+func (a *ServerPeerIDAuth) signChallengeServer(challengeServerB64 string, client peer.ID, hostname string) ([]byte, error) {
 	if len(challengeServerB64) == 0 {
 		return nil, errors.New("missing challenge")
 	}
@@ -158,7 +158,7 @@ func (a *PeerIDAuth) signChallengeServer(challengeServerB64 string, client peer.
 	return sig, nil
 }
 
-func (a *PeerIDAuth) authenticate(f authFields) (peer.ID, error) {
+func (a *ServerPeerIDAuth) authenticate(f authFields) (peer.ID, error) {
 	partsToVerify := make([]string, 0, 2)
 	o, err := getChallengeFromOpaque(a.PrivKey, []byte(f.opaque))
 	if err != nil {
@@ -180,7 +180,7 @@ func (a *PeerIDAuth) authenticate(f authFields) (peer.ID, error) {
 	return peer.IDFromPublicKey(f.pubKey)
 }
 
-func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request, expectedHostname string) (peer.ID, error) {
+func (a *ServerPeerIDAuth) UnwrapBearerToken(r *http.Request, expectedHostname string) (peer.ID, error) {
 	if !strings.Contains(r.Header.Get("Authorization"), BearerAuthScheme) {
 		return "", errors.New("missing bearer auth scheme")
 	}
@@ -195,7 +195,7 @@ func (a *PeerIDAuth) UnwrapBearerToken(r *http.Request, expectedHostname string)
 	return a.unwrapBearerToken(expectedHostname, bearerScheme)
 }
 
-func (a *PeerIDAuth) unwrapBearerToken(expectedHostname string, s authScheme) (peer.ID, error) {
+func (a *ServerPeerIDAuth) unwrapBearerToken(expectedHostname string, s authScheme) (peer.ID, error) {
 	buf := pool.Get(4096)
 	defer pool.Put(buf)
 	buf, err := b64AppendDecode(buf[:0], []byte(s.bearerToken))
@@ -404,7 +404,7 @@ func genOpaqueFromChallenge(buf []byte, now time.Time, privKey crypto.PrivKey, c
 	return buf, nil
 }
 
-func (a *PeerIDAuth) serveAuthReq(w http.ResponseWriter) {
+func (a *ServerPeerIDAuth) serveAuthReq(w http.ResponseWriter) {
 	var challenge [challengeLen]byte
 	_, err := rand.Read(challenge[:])
 	if err != nil {
