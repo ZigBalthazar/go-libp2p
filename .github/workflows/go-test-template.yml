@@ -99,8 +99,6 @@ jobs:
       - name: Run tests
         if: contains(fromJSON(steps.config.outputs.json).skipOSes, matrix.os) == false
         uses: protocol/multiple-go-modules@v1.4
-        env:
-          GOFLAGS: ${{ format('{0} {1}', env.GOFLAGS) }}
         with:
           run: go test ${{ env.GOTESTFLAGS }} ./...
       - name: Run tests (32 bit)
