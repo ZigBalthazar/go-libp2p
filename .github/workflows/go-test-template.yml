@@ -94,7 +94,7 @@ jobs:
           go version
           go env
       - name: Run repo-specific setup
-        uses: libp2p/uci/.github/actions/go-test-setup
+        uses: libp2p/uci/.github/actions/go-test-setup@main
         if: hashFiles('./.github/actions/go-test-setup') != ''
       - name: Run tests
         if: contains(fromJSON(steps.config.outputs.json).skipOSes, matrix.os) == false
