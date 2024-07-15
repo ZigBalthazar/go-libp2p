@@ -82,9 +82,9 @@ jobs:
           echo "GO386FLAGS=-v $GO386FLAGS" >> $GITHUB_ENV
           echo "GORACEFLAGS=-v $GORACEFLAGS" >> $GITHUB_ENV
       - name: Set extra flags for go test command
-        if: fromJSON(steps.config.outputs.json).gotestflags) != ''
+        if: fromJSON(steps.config.outputs.json).gotestflags != ''
         run: |
-          echo "GOTESTFLAGS=${{ fromJSON(steps.config.outputs.json).gotestflags}} $GOTESTFLAGS" >> $GITHUB_ENV
+          echo "GOTESTFLAGS=${{ fromJSON(steps.config.outputs.json).gotestflags }} $GOTESTFLAGS" >> $GITHUB_ENV
       - name: Set up the Go version read from the go.mod file
         uses: actions/setup-go@v5
         with:
