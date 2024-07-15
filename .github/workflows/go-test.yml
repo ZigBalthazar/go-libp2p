@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   go-test:
-    uses: ./go-test-template.yml
+    uses: ./.github/workflows/go-test-template.yml
     with:
       go-versions: '["1.21.x", "1.22.x"]'
     secrets:
