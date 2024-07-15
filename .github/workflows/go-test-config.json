@@ -1,0 +1,4 @@
+{
+    "skip32bit": true,
+    "gotestflags": "-p 1"
+}
