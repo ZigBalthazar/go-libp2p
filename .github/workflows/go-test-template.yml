@@ -85,6 +85,10 @@ jobs:
         if: fromJSON(steps.config.outputs.json).gotestflags != ''
         run: |
           echo "GOTESTFLAGS=${{ fromJSON(steps.config.outputs.json).gotestflags }} $GOTESTFLAGS" >> $GITHUB_ENV
+      - name: Set extra flags for go test race command
+        if: fromJSON(steps.config.outputs.json).goraceflags != ''
+        run: |
+          echo "GORACEFLAGS=${{ fromJSON(steps.config.outputs.json).goraceflags }} $GORACEFLAGS" >> $GITHUB_ENV
       - name: Set up the Go version read from the go.mod file
         uses: actions/setup-go@v5
         with:
@@ -120,10 +124,8 @@ jobs:
           fromJSON(steps.config.outputs.json).skipRace != true &&
           contains(fromJSON(steps.config.outputs.json).skipOSes, matrix.os) == false
         uses: protocol/multiple-go-modules@v1.4
-        env:
-          GOFLAGS: ${{ format('{0} {1}', env.GORACEFLAGS, env.GOFLAGS) }}
         with:
-          run: go test -race ./...
+          run: go test -race ${{ env.GORACEFLAGS }} ./...
       - name: Collect coverage files
         id: coverages
         run: echo "files=$(find . -type f -name 'module-coverage.txt' | tr -s '\n' ',' | sed 's/,$//')" >> $GITHUB_OUTPUT
