@@ -1,6 +1,7 @@
 package libp2phttp_test
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -131,7 +132,15 @@ func ExampleHost_Serve() {
 		ListenAddrs:       []ma.Multiaddr{ma.StringCast("/ip4/127.0.0.1/tcp/50221/http")},
 	}
 
-	go server.Serve()
+	serveDone := make(chan struct{})
+	go func() {
+		defer close(serveDone)
+		err := server.Serve()
+		if !errors.Is(err, net.ErrClosed) {
+			fmt.Println("Unexpected error:", err)
+		}
+	}()
+	defer func() { <-serveDone }()
 	defer server.Close()
 
 	fmt.Println(server.Addrs())
