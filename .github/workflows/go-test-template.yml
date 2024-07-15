@@ -100,9 +100,9 @@ jobs:
         if: contains(fromJSON(steps.config.outputs.json).skipOSes, matrix.os) == false
         uses: protocol/multiple-go-modules@v1.4
         env:
-          GOFLAGS: ${{ format('{0} {1}', env.GOTESTFLAGS, env.GOFLAGS) }}
+          GOFLAGS: ${{ format('{0} {1}', env.GOFLAGS) }}
         with:
-          run: go test ./...
+          run: go test ${{ env.GOTESTFLAGS }} ./...
       - name: Run tests (32 bit)
         # can't run 32 bit tests on OSX.
         if: matrix.os != 'macos' &&
